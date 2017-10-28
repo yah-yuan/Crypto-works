@@ -3,6 +3,7 @@ AES算法的简单实现
 创建时间：Fri Oct 27 14:28:05 CST 2017
 作者：张
 注释：
+    调用者将帧内地址作为参数传递给被调用者是否安全
 */
 #include <stdio.h>
 #include <stdlib.h>
@@ -23,7 +24,7 @@ unsigned char *DeCodeAES(unsigned char *cipherFileName, unsigned char *keyFileNa
 unsigned char *KeyExpansion(unsigned char *cipherKey);                               //密钥扩展
 unsigned char *RIJNDAEL(unsigned char *plainText, unsigned char *cipherKey);         //加密函数
 void Round(unsigned char *state, unsigned char *roundKey, int round);                //轮函数
-void ByteSub(unsigned char *state,int count);
+void ByteSub(unsigned char *state,int words);
 void ShiftRow(unsigned char *state);
 void MixColumn(unsigned char *state);
 void AddRoundKey(unsigned char *state);
@@ -57,15 +58,24 @@ unsigned char *EnCodeAES(unsigned char *plainFileName)
     unsigned char *cipherKey;
     unsigned char *expandedKey;
     unsigned char *state;
-    int i;
+    unsigned char *cipherText;
+    int i,j;
 
-    cipherKey = (unsigned char *)malloc(4*nBlock);
+    EnDeFlag = 0;
+    cipherKey = (unsigned char *)malloc(4*nKey);
+    state = (unsigned char *)malloc(4*nBlock);
     srand((void)time(NULL));
     for(i=0;i<4*nBlock;i++) {
         *(cipherKey+i) = (unsigned char)rand()%0xff;
-    }
+    }//这里的密码没按顺序放
     expandedKey = KeyExpansion(cipherKey);
-    ByteSub()
+    //将明文写入state
+    for(i=0;i<4*nBlock;i++) {
+        for(j=0;j<4;j++) {
+            *(state+i*4+j) = *(plainText+j*nBlock+i);
+        }
+    }
+    ByteSub(state,4*nBlock);
 #endif
 }
 unsigned char *DeCodeAES(unsigned char *cipherFileName,unsigned char *keyFileName)
@@ -117,8 +127,15 @@ unsigned char *RIJNDAEL(unsigned char *plainText, unsigned char *cipherKey)
 void Round(unsigned char *state, unsigned char *roundKey, int round)
 { //轮函数
 }
-void ByteSub(unsigned char *state,int count)
+void ByteSub(unsigned char *state,int words)
 {
+    int i;
+    unsigned char tmp1Char;
+    unsigned char * theBox = EnDeFlag?invsBox:sBox;
+    
+    for(i=0;i<words;i++) {
+        
+    }
 }
 void ShiftRow(unsigned char *state)
 {
