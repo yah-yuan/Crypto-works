@@ -28,6 +28,7 @@ void ShiftRow(unsigned char *state);
 void MixColumn(unsigned char *state);
 void AddRoundKey(unsigned char *state, unsigned char *roundKey);
 void CpChars(unsigned char *dest, unsigned char *origin, int length); //复制字
+unsigned char FuncMul(unsigned char num1, unsigned char num2);        //GF28上的乘法
 
 int EnDeFlag = 0; //声明正在加密(0)解密(1)
 
@@ -37,7 +38,7 @@ int main()
     char *cipherFileName;
     char *keyFileName;
 #if (DEBUG)
-    unsigned char plainText[] = {0x00,0x01,0x00,0x01,0x01,0xa1,0x98,0xaf,0xda,0x78,0x17,0x34,0x86,0x15,0x35,0x66};
+    unsigned char plainText[] = {0x00, 0x01, 0x00, 0x01, 0x01, 0xa1, 0x98, 0xaf, 0xda, 0x78, 0x17, 0x34, 0x86, 0x15, 0x35, 0x66};
     unsigned char *cipherText;
     unsigned char *cipherKey;
     unsigned char *decodedText;
@@ -46,16 +47,16 @@ int main()
     cipherText = EnCodeAES(plainText);
     cipherKey = cipherText + 4 * nBlock;
     printf("coded cipher text is:\n");
-    for(i=0;i<nBlock*4;i++)
-        printf("0x%x ",cipherText[i]);
+    for (i = 0; i < nBlock * 4; i++)
+        printf("0x%x ", cipherText[i]);
     printf("cipher key is:\n");
-    for(i=0;i<nKey*4;i++)
-        printf("0x%x ",cipherKey[i]);
+    for (i = 0; i < nKey * 4; i++)
+        printf("0x%x ", cipherKey[i]);
     printf("\n");
     decodedText = DeCodeAES(cipherText, cipherKey);
     printf("decoded plain text is :\n");
-    for(i=0;i<nBlock*4;i++)
-        printf("0x%x ",decodedText[i]);
+    for (i = 0; i < nBlock * 4; i++)
+        printf("0x%x ", decodedText[i]);
     printf("\n");
     printf("%s", decodedText);
 #endif
@@ -64,18 +65,19 @@ int main()
 unsigned char *EnCodeAES(unsigned char *plainFileName)
 { //读取密文-->产生密钥-->开始加密-->写出密文文件和密钥
 #if (DEBUG)
-    unsigned char cipherKey[] = {0x00,0x01,0x20,0x01,0x71,0x01,0x98,0xae,0xda,0x79,0x17,0x14,0x60,0x15,0x35,0x94};
-    unsigned char mainKey[4 * nKey];
+    unsigned char cipherKey[] = {0x00, 0x01, 0x20, 0x01, 0x71, 0x01, 0x98, 0xae, 0xda, 0x79, 0x17, 0x14, 0x60, 0x15, 0x35, 0x94};
+    unsigned char *mainKey = cipherKey;
     unsigned char *state;
     unsigned char *plainText = plainFileName;
-    unsigned char *expandedKey;
+    unsigned char *expandedKey,*expandedKey_l;
     unsigned char cipherText[4 * nBlock];
     unsigned char *resMessege;
-    int i, j;
+    int i, j,k;
 
     EnDeFlag = 0;
     resMessege = (unsigned char *)malloc(4 * nBlock + 4 * nKey);
     state = (unsigned char *)malloc(4 * nBlock);
+    expandedKey = (unsigned char *)malloc(nBlock * (nRound + 1) * 4);
     nRound = nRoundTable[(nBlock / 2 - 2) + (nKey / 2 - 2) * 3]; //设置轮数
     /*
     srand((unsigned int)time(NULL));
@@ -84,16 +86,15 @@ unsigned char *EnCodeAES(unsigned char *plainFileName)
         *(cipherKey + i) = (unsigned char)rand() % 0xff;
     }
     */
-    //将密钥写入mainKey
-    for (i = 0; i < nKey; i++)
-    {
-        for (j = 0; j < 4; j++)
-        {
-            *(mainKey + i * 4 + j) = *(cipherKey + j * nKey + i);
+    //mainKey = &cipherKey[0];
+    expandedKey_l = KeyExpansion(mainKey);
+    //将密钥写入expandedKey
+    for(k=0;k<nBlock*(nRound+1);k++) {
+        for(i=0;i<4;i++) {
+            *(expandedKey + k*4 + i) = *(expandedKey_l + (k/4)*nKey*4 + k%4 + 4*i);
         }
     }
-    //mainKey = &cipherKey[0];
-    expandedKey = KeyExpansion(mainKey);
+    free(expandedKey_l);
     //将明文写入state
     for (i = 0; i < nBlock; i++)
     {
@@ -115,7 +116,7 @@ unsigned char *EnCodeAES(unsigned char *plainFileName)
         }
     }
     CpChars(resMessege, cipherText, 4 * nBlock);
-    CpChars(resMessege + 4 * nBlock, mainKey, 4 * nKey);
+    CpChars(resMessege + 4 * nBlock, cipherKey, 4 * nKey);
     return resMessege;
 #endif
 }
@@ -123,13 +124,13 @@ unsigned char *DeCodeAES(unsigned char *cipherFileName, unsigned char *keyFileNa
 {
     unsigned char *cipherText = cipherFileName;
     unsigned char *cipherKey = keyFileName;
-    unsigned char *expandedKey;
+    unsigned char *expandedKey_l,*expandedKey;
     unsigned char *plainText;
     unsigned char state[nBlock * 4];
-    int i, j;
-
-    EnDeFlag = 1; //开始解密
+    int i, j,k;
+    //开始解密
     plainText = (unsigned char *)malloc(nBlock * 4);
+    expandedKey = (unsigned char *)malloc(nBlock * (nRound + 1) * 4);
 
     //将密文写入state
     for (i = 0; i < 4 * nBlock; i++)
@@ -140,15 +141,23 @@ unsigned char *DeCodeAES(unsigned char *cipherFileName, unsigned char *keyFileNa
         }
     }
     //inv密钥扩展
-    expandedKey = KeyExpansion(cipherKey);
+    expandedKey_l = KeyExpansion(cipherKey);
+    //将密钥写入expandedKey
+    for(k=0;k<nBlock*(nRound+1);k++) {
+        for(i=0;i<4;i++) {
+            *(expandedKey + k*4 + i) = *(expandedKey_l + (k/4)*nKey*4 + k%4 + 4*i);
+        }
+    }
+    free(expandedKey_l);
     //开始解密
+    EnDeFlag = 1;
     Controller(state, expandedKey);
     //加密结束，取出密文
-    for (i = 0; i < 4 * nBlock; i++)
+    for (i = 0; i < nBlock; i++)
     {
         for (j = 0; j < 4; j++)
         {
-            *(plainText + j * nKey + i) = *(state + i * 4 + j);
+            *(plainText + j * nBlock + i) = *(state + i * nBlock + j);
         }
     }
     return plainText;
@@ -156,11 +165,12 @@ unsigned char *DeCodeAES(unsigned char *cipherFileName, unsigned char *keyFileNa
 unsigned char *KeyExpansion(unsigned char *mainKey)
 { //密钥扩展
     unsigned char *expandedKey;
-    unsigned char tmp4Char[4];
+    unsigned char *tmp4Char;
     unsigned char tmp1Char;
     int i, j;
 
     expandedKey = (unsigned char *)malloc(nBlock * (nRound + 1) * 4);
+    tmp4Char = (unsigned char *)malloc(4);
     CpChars(expandedKey, mainKey, nKey * 4);
     for (i = nKey; i < nBlock * (nRound + 1); i++)
     {
@@ -169,13 +179,13 @@ unsigned char *KeyExpansion(unsigned char *mainKey)
         {
             //Rotl(tmp)
             tmp1Char = tmp4Char[0];
-            for(j=0;j<3;j++)
-                tmp4Char[j] = tmp4Char[j+1];
+            for (j = 0; j < 3; j++)
+                tmp4Char[j] = tmp4Char[j + 1];
             tmp4Char[3] = tmp1Char;
             //subByte
             ByteSub(tmp4Char, 4);
             //temp
-            tmp4Char[0] ^= RC[i/nKey-1];
+            tmp4Char[0] ^= RC[i / nKey-1];
             for (j = 1; j < 4; j++)
             {
                 *(tmp4Char + j) ^= 0x00;
@@ -183,7 +193,7 @@ unsigned char *KeyExpansion(unsigned char *mainKey)
         }
         for (j = 0; j < 4; j++)
         {
-            *(expandedKey + i * 4 + j) = *(expandedKey + (i - nKey) * 4 + j) ^ *(tmp4Char + j);
+            *(expandedKey + i*4+j) = *(expandedKey + (i-nKey)*4 + j) ^ *(tmp4Char + j);
         }
     }
     return expandedKey;
@@ -198,7 +208,7 @@ void Controller(unsigned char *state, unsigned char *expandedKey)
         //初始轮密钥相加
         AddRoundKey(state, roundKey);
         //进行nRound-1次轮函数
-        for (i = 1; i < (nRound - 1); i++)
+        for (i = 0; i < (nRound - 1); i++)
         {
             roundKey += nBlock * 4;
             ByteSub(state, nBlock * 4);
@@ -255,7 +265,7 @@ void ShiftRow(unsigned char *state)
     int i, j;
     for (i = 1; i < 4; i++)
     {
-        shiftNum = !EnDeFlag ? shiftTable[(nBlock / 2 - 2) * 3 + i-1] : (nBlock - shiftTable[(nBlock / 2 - 2) * 3 + i-1]);
+        shiftNum = !EnDeFlag ? shiftTable[(nBlock / 2 - 2) * 3 + i - 1] : (nBlock - shiftTable[(nBlock / 2 - 2) * 3 + i - 1]);
         /*
         tmp1Char = state[i*nBlock] >> (8-shiftNum);
         for(j=0;j<nBlock;j++) {
@@ -280,8 +290,8 @@ void ShiftRow(unsigned char *state)
 }
 void MixColumn(unsigned char *state)
 {
-    int i, j, k;
-    unsigned char *tmp4Char;
+    int i, j, k, l;
+    unsigned char *tmp4Char, tmp1Char;
     const unsigned char *theBox = EnDeFlag ? invColunmBox : colunmBox;
 
     tmp4Char = (unsigned char *)malloc(4);
@@ -296,7 +306,14 @@ void MixColumn(unsigned char *state)
             state[j * nBlock + i] = 0;
             for (k = 0; k < 4; k++)
             {
-                state[j * nBlock + i] += theBox[j * 4 + k] * tmp4Char[k];
+                if (k == 0)
+                {
+                    state[j * nBlock + i] = FuncMul(theBox[j * 4 + k],tmp4Char[k]);
+                }
+                else
+                {
+                    state[j * nBlock + i] ^= FuncMul(theBox[j * 4 + k], tmp4Char[k]);
+                }
             }
         }
     }
@@ -316,4 +333,28 @@ void CpChars(unsigned char *dest, unsigned char *origin, int length)
     {
         *(dest + i) = *(origin + i);
     }
+}
+
+unsigned char FuncMul(unsigned char num1, unsigned char num2)
+{
+    unsigned char bw[4];
+    unsigned char res = 0;
+    int i;
+    bw[0] = num2;
+    for (i = 1; i < 4; i++) //循环三次，分别得到参数b乘2、4、8后的值，储存到bw[i]里面
+    {
+        bw[i] = bw[i - 1] << 1; //原数值乘2
+        if (bw[i - 1] & 0x80)   //判断原数值是否小于0x80
+        {
+            bw[i] ^= 0x1b; //如果大于0x80的话，减去一个不可约多项式
+        }
+    }
+    for (i = 0; i < 4; i++)
+    {
+        if ((num1 >> i) & 0x01) //将参数a的值表示为1、2、4、8的线性组合
+        {
+            res ^= bw[i];
+        }
+    }
+    return res;
 }
