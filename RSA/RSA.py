@@ -9,7 +9,6 @@ import os
 import sys
 import shelve
 import binascii
-import string
 
 
 class _Rsa(object):
