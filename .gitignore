@@ -1,6 +1,5 @@
 .vscode/*
 AES/AES_Debug/*
-AES/aes.out
-RSA/RSA_debug.pyc
+*.pyc
 RSA/*.key
 RSA/*Text
